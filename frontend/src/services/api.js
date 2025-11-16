@@ -2,8 +2,9 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
 // Create axios instance
+// Use empty baseURL to use Vite proxy (configured in vite.config.js)
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: '',
   timeout: 60000,
   headers: {
     'Content-Type': 'application/json'

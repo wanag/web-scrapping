@@ -46,8 +46,8 @@ if ! ps -p $BACKEND_PID > /dev/null; then
     exit 1
 fi
 
-echo "✓ Backend started on http://localhost:8000"
-echo "  API docs: http://localhost:8000/docs"
+echo "✓ Backend started on http://localhost:8001"
+echo "  API docs: http://localhost:8001/docs"
 echo ""
 
 # Start frontend
@@ -66,13 +66,13 @@ if ! ps -p $FRONTEND_PID > /dev/null; then
     exit 1
 fi
 
-echo "✓ Frontend started on http://localhost:3000"
+echo "✓ Frontend started on http://localhost:7998"
 echo ""
 echo "========================================"
 echo "Application is ready!"
 echo "========================================"
 echo ""
-echo "Access the application at: http://localhost:3000"
+echo "Access the application at: http://localhost:7998"
 echo "Default PIN: 1234"
 echo ""
 echo "Press Ctrl+C to stop all servers"
