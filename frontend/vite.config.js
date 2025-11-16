@@ -14,6 +14,7 @@ export default defineConfig({
     }
   },
   server: {
+    host: '0.0.0.0',  // Allow network access
     port: 7998,
     proxy: {
       '/api': {

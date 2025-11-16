@@ -50,7 +50,13 @@ app = FastAPI(
 )
 
 # Configure CORS
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+CORS_ORIGINS_ENV = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+# Handle wildcard for development
+if CORS_ORIGINS_ENV == "*":
+    CORS_ORIGINS = ["*"]
+else:
+    CORS_ORIGINS = CORS_ORIGINS_ENV.split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
