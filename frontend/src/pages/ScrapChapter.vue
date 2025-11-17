@@ -103,6 +103,29 @@
           </v-card-text>
         </v-card>
 
+        <!-- Simplified Markdown Toggle -->
+        <v-card class="mb-4" variant="outlined">
+          <v-card-text>
+            <v-switch
+              v-model="simplifyMarkdown"
+              color="primary"
+              hide-details
+            >
+              <template v-slot:label>
+                <div class="d-flex align-center">
+                  <v-icon icon="mdi-format-text" class="mr-2" color="primary"></v-icon>
+                  <div>
+                    <div class="font-weight-bold">Simplified Markdown</div>
+                    <div class="text-caption text-medium-emphasis">
+                      Keep only headings, paragraphs, and lists. Remove bold, italic, code blocks, images, etc.
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </v-switch>
+          </v-card-text>
+        </v-card>
+
         <!-- Action Buttons -->
         <div class="d-flex gap-2 mb-4">
           <v-btn
@@ -520,6 +543,7 @@ const tagsInput = ref('')
 const sourceUrl = ref('')
 const mode = ref('index_page')
 const chineseMode = ref(localStorage.getItem('chineseMode') === 'true')
+const simplifyMarkdown = ref(localStorage.getItem('simplifyMarkdown') === 'true')
 
 // Clustering state
 const clusterThreshold = ref(0.9)
@@ -572,6 +596,11 @@ const headers = [
 // Watch chineseMode and persist to localStorage
 watch(chineseMode, (newValue) => {
   localStorage.setItem('chineseMode', newValue.toString())
+})
+
+// Watch simplifyMarkdown and persist to localStorage
+watch(simplifyMarkdown, (newValue) => {
+  localStorage.setItem('simplifyMarkdown', newValue.toString())
 })
 
 onMounted(() => {
@@ -703,7 +732,8 @@ async function startScraping() {
             chapter.name,
             editedData.customContent,
             editedData.selectedContainers,
-            chineseMode.value
+            chineseMode.value,
+            simplifyMarkdown.value
           )
         } else {
           console.log(`[Scrape Chapter] Scraping from URL: ${chapter.url}`)
@@ -714,7 +744,8 @@ async function startScraping() {
             chapter.name,
             null,
             null,
-            chineseMode.value
+            chineseMode.value,
+            simplifyMarkdown.value
           )
         }
 
@@ -777,7 +808,7 @@ async function openChapterPreview(chapter) {
     console.log('[Chapter Preview] Previewing chapter:', chapter.name, chapter.url)
 
     // Call preview API with one_page mode
-    const response = await api.scraper.preview(chapter.url, 'one_page', true, chineseMode.value)
+    const response = await api.scraper.preview(chapter.url, 'one_page', true, chineseMode.value, simplifyMarkdown.value)
 
     if (response.data.success) {
       chapterPreviewData.value = response.data

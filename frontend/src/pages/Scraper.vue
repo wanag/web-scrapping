@@ -76,6 +76,23 @@
                     </template>
                   </v-switch>
 
+                  <v-switch
+                    v-model="simplifyMarkdown"
+                    label="Simplified Markdown"
+                    color="primary"
+                    hint="Keep only headings, paragraphs, and lists. Remove bold, italic, code blocks, images, etc."
+                    persistent-hint
+                    :disabled="loading"
+                    class="mb-4"
+                  >
+                    <template v-slot:label>
+                      <div class="d-flex align-center">
+                        <v-icon icon="mdi-format-text" class="mr-2"></v-icon>
+                        <span>Simplified Markdown</span>
+                      </div>
+                    </template>
+                  </v-switch>
+
                   <v-alert
                     v-if="error"
                     type="error"
@@ -465,6 +482,7 @@ const { isDark, toggleTheme } = useTheme()
 const url = ref('')
 const selectedMode = ref('one_page')
 const chineseMode = ref(localStorage.getItem('chineseMode') === 'true')
+const simplifyMarkdown = ref(localStorage.getItem('simplifyMarkdown') === 'true')
 const modes = [
   {
     value: 'one_page',
@@ -538,7 +556,7 @@ async function startPreview() {
   error.value = null
 
   try {
-    const response = await api.scraper.preview(url.value, selectedMode.value, false, chineseMode.value)
+    const response = await api.scraper.preview(url.value, selectedMode.value, false, chineseMode.value, simplifyMarkdown.value)
 
     if (response.data.success) {
       previewData.value = response.data
@@ -600,7 +618,7 @@ async function goToEditor() {
   // Load full content and navigate to editor page
   try {
     loading.value = true
-    const response = await api.scraper.preview(url.value, 'one_page', true, chineseMode.value)
+    const response = await api.scraper.preview(url.value, 'one_page', true, chineseMode.value, simplifyMarkdown.value)
 
     console.log('Full content response:', {
       success: response.data.success,
@@ -680,7 +698,8 @@ async function executeScrape() {
       metadataOverrides,
       customContent,
       selectedChaptersList,
-      chineseMode.value
+      chineseMode.value,
+      simplifyMarkdown.value
     )
 
     if (response.data.success) {
@@ -797,6 +816,11 @@ function openScrapChapter() {
 // Watch chineseMode and persist to localStorage
 watch(chineseMode, (newValue) => {
   localStorage.setItem('chineseMode', newValue.toString())
+})
+
+// Watch simplifyMarkdown and persist to localStorage
+watch(simplifyMarkdown, (newValue) => {
+  localStorage.setItem('simplifyMarkdown', newValue.toString())
 })
 
 // Handle returning from editor

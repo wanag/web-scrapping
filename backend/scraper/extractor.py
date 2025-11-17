@@ -138,7 +138,7 @@ class ContentExtractor:
         # All retries failed
         return None, f"{last_error} (after {max_retries} attempts)"
 
-    def extract_content(self, html: str, track_containers: bool = False, chinese_mode: bool = False) -> Tuple[str, Optional[List[Dict]]]:
+    def extract_content(self, html: str, track_containers: bool = False, chinese_mode: bool = False, simplify_markdown: bool = False) -> Tuple[str, Optional[List[Dict]]]:
         """
         Extract main text content from HTML.
 
@@ -146,6 +146,7 @@ class ContentExtractor:
             html: HTML content
             track_containers: Whether to track container information
             chinese_mode: Use Chinese character detection for content extraction
+            simplify_markdown: Simplify markdown to only headings, paragraphs, and lists
 
         Returns:
             Tuple of (extracted_text, containers_list)
@@ -203,6 +204,10 @@ class ContentExtractor:
             text = self._extract_text_with_structure(main_content, None)
             text = self._clean_text(text)
 
+            # Apply markdown simplification if requested
+            if simplify_markdown:
+                text = self._simplify_markdown(text)
+
             # Prepare container tracking if requested
             if track_containers and chinese_containers:
                 # Return container info without the 'element' key
@@ -241,6 +246,10 @@ class ContentExtractor:
 
         # Clean up the text
         text = self._clean_text(text)
+
+        # Apply markdown simplification if requested
+        if simplify_markdown:
+            text = self._simplify_markdown(text)
 
         return text, containers_tracker
 
@@ -496,6 +505,89 @@ class ContentExtractor:
 
         return text
 
+    def _simplify_markdown(self, text: str) -> str:
+        """
+        Simplify markdown to only basic elements: headings, paragraphs, and lists.
+        Removes: bold, italic, links (keeps text), code blocks, blockquotes,
+                 images, horizontal rules, tables.
+
+        Args:
+            text: Markdown-formatted text
+
+        Returns:
+            Simplified markdown text
+        """
+        # Remove images completely: ![alt text](url) or ![alt text]
+        text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', '', text)
+        text = re.sub(r'!\[([^\]]*)\]', '', text)
+
+        # Convert code blocks to plain text (remove fence markers but keep content)
+        # Handle ``` fenced code blocks
+        text = re.sub(r'^```(?:\w+)?\n([\s\S]*?)^```\s*$', r'\1', text, flags=re.MULTILINE)
+        # Handle ~~~ fenced code blocks
+        text = re.sub(r'^~~~(?:\w+)?\n([\s\S]*?)^~~~\s*$', r'\1', text, flags=re.MULTILINE)
+
+        # Remove inline code backticks: `code` → code
+        text = re.sub(r'`([^`]+)`', r'\1', text)
+
+        # Remove horizontal rules: ---, ***, ___
+        text = re.sub(r'^\s*[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+
+        # Convert blockquotes to plain paragraphs: > text → text
+        text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+
+        # Remove bold: **text** or __text__ → text
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        text = re.sub(r'__(.+?)__', r'\1', text)
+
+        # Remove italic: *text* or _text_ → text (careful not to break list markers)
+        # Match italic only when not at the start of a line (to preserve list markers)
+        text = re.sub(r'(?<!^)(?<!\s)\*([^*\n]+?)\*', r'\1', text, flags=re.MULTILINE)
+        text = re.sub(r'(?<!^)(?<!\s)_([^_\n]+?)_', r'\1', text, flags=re.MULTILINE)
+
+        # Simplify links: [text](url) → text
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        # Also handle reference-style links: [text][ref] → text
+        text = re.sub(r'\[([^\]]+)\]\[[^\]]*\]', r'\1', text)
+
+        # Remove table structures (simple approach: remove lines with | delimiters)
+        # This will convert tables to plain text by removing the markdown table syntax
+        lines = text.split('\n')
+        cleaned_lines = []
+        in_table = False
+
+        for line in lines:
+            # Detect table separator line: |---|---|
+            if re.match(r'^\s*\|?[\s:-]*\|[\s|:-]*\|[\s:-]*\|?\s*$', line):
+                in_table = True
+                continue
+
+            # If line has multiple | characters, it's likely a table row
+            if line.count('|') >= 2:
+                # Extract content from table cells and join with spaces
+                cells = [cell.strip() for cell in line.split('|')]
+                # Filter out empty cells
+                cells = [cell for cell in cells if cell]
+                if cells:
+                    cleaned_lines.append(' '.join(cells))
+                in_table = True
+            elif in_table:
+                # End of table, add the line normally
+                in_table = False
+                cleaned_lines.append(line)
+            else:
+                cleaned_lines.append(line)
+
+        text = '\n'.join(cleaned_lines)
+
+        # Clean up excessive blank lines created by removals
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+
+        # Remove leading/trailing whitespace
+        text = text.strip()
+
+        return text
+
     def extract_metadata(self, html: str, url: str) -> Dict[str, Optional[str]]:
         """
         Extract metadata from HTML page.
@@ -650,7 +742,7 @@ class ContentExtractor:
         combined = '\n\n'.join(extracted_parts)
         return self._clean_text(combined)
 
-    def scrape_page(self, url: str, track_containers: bool = False, selected_containers: Optional[List[int]] = None, chinese_mode: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
+    def scrape_page(self, url: str, track_containers: bool = False, selected_containers: Optional[List[int]] = None, chinese_mode: bool = False, simplify_markdown: bool = False) -> Tuple[Optional[Dict], Optional[str]]:
         """
         Scrape a single page and extract content and metadata.
 
@@ -659,6 +751,7 @@ class ContentExtractor:
             track_containers: Whether to track container information
             selected_containers: List of container indices to include (None = all)
             chinese_mode: Use Chinese character detection for content extraction
+            simplify_markdown: Simplify markdown to only headings, paragraphs, and lists
 
         Returns:
             Tuple of (result_dict, error_message)
@@ -671,7 +764,7 @@ class ContentExtractor:
 
         try:
             # Extract content
-            content, containers = self.extract_content(html, track_containers, chinese_mode)
+            content, containers = self.extract_content(html, track_containers, chinese_mode, simplify_markdown)
 
             if not content:
                 return None, "No content found on page"

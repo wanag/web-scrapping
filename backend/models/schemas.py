@@ -50,6 +50,7 @@ class ScrapeRequest(BaseModel):
         description="List of chapter URLs to scrape (for INDEX_PAGE and HYBRID modes)"
     )
     chinese_mode: bool = Field(default=False, description="Use Chinese character detection for content extraction")
+    simplify_markdown: bool = Field(default=False, description="Simplify markdown to only headings, paragraphs, and lists")
 
 
 class ScrapeProgress(BaseModel):
@@ -68,6 +69,7 @@ class PreviewRequest(BaseModel):
     include_full_content: bool = Field(default=False, description="Include full content for editing")
     selected_containers: Optional[List[int]] = Field(default=None, description="Indices of containers to include (None = all)")
     chinese_mode: bool = Field(default=False, description="Use Chinese character detection for content extraction")
+    simplify_markdown: bool = Field(default=False, description="Simplify markdown to only headings, paragraphs, and lists")
 
 
 class PreviewMetadata(BaseModel):
@@ -167,6 +169,7 @@ class AddChapterRequest(BaseModel):
     custom_content: Optional[str] = Field(None, description="User-edited content (overrides scraped content)")
     selected_containers: Optional[List[int]] = Field(None, description="Indices of containers to include (None = all)")
     chinese_mode: bool = Field(default=False, description="Use Chinese character detection for content extraction")
+    simplify_markdown: bool = Field(default=False, description="Simplify markdown to only headings, paragraphs, and lists")
 
 
 class AddChapterResponse(BaseModel):

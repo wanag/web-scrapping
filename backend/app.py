@@ -210,7 +210,7 @@ async def logout(_: dict = Depends(require_auth)):
     tags=["Scraper"],
     dependencies=[Depends(require_auth)]
 )
-async def preview_from_html(raw_html: str, mode: ScrapeMode = ScrapeMode.ONE_PAGE, chinese_mode: bool = False):
+async def preview_from_html(raw_html: str, mode: ScrapeMode = ScrapeMode.ONE_PAGE, chinese_mode: bool = False, simplify_markdown: bool = False):
     """
     Preview content from raw HTML (for manual import when URL scraping fails).
 
@@ -218,6 +218,7 @@ async def preview_from_html(raw_html: str, mode: ScrapeMode = ScrapeMode.ONE_PAG
         raw_html: Raw HTML content
         mode: Scraping mode
         chinese_mode: Use Chinese character detection
+        simplify_markdown: Simplify markdown to only headings, paragraphs, and lists
 
     Returns:
         Preview with content sample and extracted metadata
@@ -225,7 +226,7 @@ async def preview_from_html(raw_html: str, mode: ScrapeMode = ScrapeMode.ONE_PAG
     try:
         if mode == ScrapeMode.ONE_PAGE:
             # Extract content from HTML
-            content, containers = extractor.extract_content(raw_html, track_containers=True, chinese_mode=chinese_mode)
+            content, containers = extractor.extract_content(raw_html, track_containers=True, chinese_mode=chinese_mode, simplify_markdown=simplify_markdown)
 
             if not content:
                 return PreviewResponse(
@@ -335,7 +336,8 @@ async def preview_scrape(preview_request: PreviewRequest):
             preview_request.url,
             track_containers=True,
             selected_containers=preview_request.selected_containers,
-            chinese_mode=preview_request.chinese_mode
+            chinese_mode=preview_request.chinese_mode,
+            simplify_markdown=preview_request.simplify_markdown
         )
 
         if error:
@@ -469,7 +471,7 @@ async def preview_scrape(preview_request: PreviewRequest):
             index_content = None
             index_length = 0
             if preview_request.mode == ScrapeMode.HYBRID:
-                content, _ = extractor.extract_content(html, track_containers=False, chinese_mode=preview_request.chinese_mode)
+                content, _ = extractor.extract_content(html, track_containers=False, chinese_mode=preview_request.chinese_mode, simplify_markdown=preview_request.simplify_markdown)
                 if content:
                     index_content = content[:500] + "..." if len(content) > 500 else content
                     index_length = len(content)
@@ -562,7 +564,7 @@ async def execute_scrape(scrape_request: ScrapeRequest):
                     metadata['language'] = 'en'
             else:
                 # Scrape the page
-                result, error = extractor.scrape_page(scrape_request.url, chinese_mode=scrape_request.chinese_mode)
+                result, error = extractor.scrape_page(scrape_request.url, chinese_mode=scrape_request.chinese_mode, simplify_markdown=scrape_request.simplify_markdown)
 
                 if error:
                     return ScrapeResponse(
@@ -622,7 +624,7 @@ async def execute_scrape(scrape_request: ScrapeRequest):
             if scrape_request.mode == ScrapeMode.HYBRID:
                 html, error = extractor.fetch_page(scrape_request.url)
                 if not error:
-                    content, _ = extractor.extract_content(html, track_containers=False, chinese_mode=scrape_request.chinese_mode)
+                    content, _ = extractor.extract_content(html, track_containers=False, chinese_mode=scrape_request.chinese_mode, simplify_markdown=scrape_request.simplify_markdown)
                     if content:
                         chapters_content.append({
                             'title': 'Index',
@@ -637,7 +639,7 @@ async def execute_scrape(scrape_request: ScrapeRequest):
                 for idx, chapter_url in enumerate(scrape_request.selected_chapters):
                     print(f"Scraping chapter {idx + 1}/{len(scrape_request.selected_chapters)}: {chapter_url}")
 
-                    result, error = extractor.scrape_page(chapter_url, chinese_mode=scrape_request.chinese_mode)
+                    result, error = extractor.scrape_page(chapter_url, chinese_mode=scrape_request.chinese_mode, simplify_markdown=scrape_request.simplify_markdown)
                     if error:
                         errors.append(f"Failed to scrape {chapter_url}: {error}")
                         continue
@@ -805,7 +807,8 @@ async def add_chapter(request: AddChapterRequest):
                 chapter_content, containers = extractor.extract_content(
                     html,
                     track_containers=True,
-                    chinese_mode=request.chinese_mode
+                    chinese_mode=request.chinese_mode,
+                    simplify_markdown=request.simplify_markdown
                 )
 
                 # Re-extract with only selected containers
@@ -815,7 +818,7 @@ async def add_chapter(request: AddChapterRequest):
                     )
             else:
                 # Normal scraping
-                result, error = extractor.scrape_page(request.chapter_url, chinese_mode=request.chinese_mode)
+                result, error = extractor.scrape_page(request.chapter_url, chinese_mode=request.chinese_mode, simplify_markdown=request.simplify_markdown)
 
                 if error:
                     return AddChapterResponse(

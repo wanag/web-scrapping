@@ -55,31 +55,34 @@ export default {
 
   // Scraper
   scraper: {
-    preview(url, mode = 'one_page', includeFullContent = false, chineseMode = false) {
+    preview(url, mode = 'one_page', includeFullContent = false, chineseMode = false, simplifyMarkdown = false) {
       return api.post('/api/scraper/preview', {
         url,
         mode,
         include_full_content: includeFullContent,
-        chinese_mode: chineseMode
+        chinese_mode: chineseMode,
+        simplify_markdown: simplifyMarkdown
       })
     },
-    previewWithContainers(url, mode = 'one_page', includeFullContent = false, selectedContainers = null, chineseMode = false) {
+    previewWithContainers(url, mode = 'one_page', includeFullContent = false, selectedContainers = null, chineseMode = false, simplifyMarkdown = false) {
       return api.post('/api/scraper/preview', {
         url,
         mode,
         include_full_content: includeFullContent,
         selected_containers: selectedContainers,
-        chinese_mode: chineseMode
+        chinese_mode: chineseMode,
+        simplify_markdown: simplifyMarkdown
       })
     },
-    execute(url, mode = 'one_page', metadataOverrides = null, customContent = null, selectedChapters = null, chineseMode = false) {
+    execute(url, mode = 'one_page', metadataOverrides = null, customContent = null, selectedChapters = null, chineseMode = false, simplifyMarkdown = false) {
       return api.post('/api/scraper/execute', {
         url,
         mode,
         metadata_overrides: metadataOverrides,
         custom_content: customContent,
         selected_chapters: selectedChapters,
-        chinese_mode: chineseMode
+        chinese_mode: chineseMode,
+        simplify_markdown: simplifyMarkdown
       })
     },
     createBook(metadata) {
@@ -93,7 +96,7 @@ export default {
         scrape_mode: metadata.scrape_mode || 'index_page'
       })
     },
-    addChapter(bookId, chapterUrl, chapterIndex, chapterName, customContent = null, selectedContainers = null, chineseMode = false) {
+    addChapter(bookId, chapterUrl, chapterIndex, chapterName, customContent = null, selectedContainers = null, chineseMode = false, simplifyMarkdown = false) {
       return api.post('/api/scraper/add-chapter', {
         book_id: bookId,
         chapter_url: chapterUrl,
@@ -101,7 +104,8 @@ export default {
         chapter_name: chapterName,
         custom_content: customContent,
         selected_containers: selectedContainers,
-        chinese_mode: chineseMode
+        chinese_mode: chineseMode,
+        simplify_markdown: simplifyMarkdown
       })
     }
   },
