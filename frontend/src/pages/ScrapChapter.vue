@@ -123,6 +123,15 @@
           >
             Deselect All
           </v-btn>
+          <v-btn
+            color="primary"
+            variant="outlined"
+            prepend-icon="mdi-swap-vertical"
+            @click="reverseOrder"
+            :disabled="scraping || displayChapters.length === 0"
+          >
+            Reverse Order
+          </v-btn>
           <v-spacer></v-spacer>
           <v-btn
             color="success"
@@ -597,6 +606,25 @@ function selectAll() {
 
 function deselectAll() {
   selectedLinks.value = []
+}
+
+function reverseOrder() {
+  // Reverse the order of chapters
+  if (clusteringApplied.value) {
+    // Reverse filtered chapters
+    filteredChapters.value = filteredChapters.value.reverse()
+    // Renumber order sequentially
+    filteredChapters.value.forEach((ch, idx) => {
+      ch.order = idx
+    })
+  } else {
+    // Reverse original chapters
+    chapters.value = chapters.value.reverse()
+    // Renumber order sequentially
+    chapters.value.forEach((ch, idx) => {
+      ch.order = idx
+    })
+  }
 }
 
 function truncateUrl(url) {

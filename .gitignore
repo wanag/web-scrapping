@@ -42,6 +42,7 @@ venv.bak/
 # Data directory (scraped books)
 data/books/*
 !data/books/.gitkeep
+SCRAPING_ALTERNATIVES.md
 
 # Node.js
 node_modules/

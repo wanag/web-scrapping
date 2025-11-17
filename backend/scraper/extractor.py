@@ -3,6 +3,7 @@ Content extraction from web pages.
 """
 import re
 import requests
+import cloudscraper
 from typing import Dict, Optional, Tuple, List
 from bs4 import BeautifulSoup, Tag
 from langdetect import detect, LangDetectException
@@ -22,48 +23,120 @@ class ContentExtractor:
         """
         self.timeout = timeout
         self.max_size_bytes = max_size_mb * 1024 * 1024
+
+        # More realistic browser headers to avoid anti-bot detection
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
         }
 
-    def fetch_page(self, url: str) -> Tuple[Optional[str], Optional[str]]:
+        # Create a cloudscraper session to bypass Cloudflare and other anti-bot protections
+        # Falls back to regular requests if cloudscraper fails
+        try:
+            self.session = cloudscraper.create_scraper(
+                browser={
+                    'browser': 'chrome',
+                    'platform': 'windows',
+                    'desktop': True
+                }
+            )
+            self.session.headers.update(self.headers)
+            self.using_cloudscraper = True
+            print("[ContentExtractor] Using cloudscraper for anti-bot bypass")
+        except Exception as e:
+            print(f"[ContentExtractor] Cloudscraper init failed, using regular requests: {e}")
+            self.session = requests.Session()
+            self.session.headers.update(self.headers)
+            self.using_cloudscraper = False
+
+    def fetch_page(self, url: str, max_retries: int = 3) -> Tuple[Optional[str], Optional[str]]:
         """
-        Fetch HTML content from a URL.
+        Fetch HTML content from a URL with retry logic.
 
         Args:
             url: URL to fetch
+            max_retries: Maximum number of retry attempts (default: 3)
 
         Returns:
             Tuple of (html_content, error_message)
         """
-        try:
-            response = requests.get(
-                url,
-                headers=self.headers,
-                timeout=self.timeout,
-                stream=True
-            )
-            response.raise_for_status()
+        import time
+        from urllib.parse import urlparse
 
-            # Check content size
-            content_length = response.headers.get('content-length')
-            if content_length and int(content_length) > self.max_size_bytes:
-                return None, f"Content too large: {int(content_length) / (1024*1024):.2f}MB"
+        last_error = None
 
-            # Get content
-            content = response.text
+        for attempt in range(max_retries):
+            try:
+                # Add a small delay between retries to avoid rate limiting
+                if attempt > 0:
+                    delay = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                    print(f"Retry attempt {attempt + 1}/{max_retries} after {delay}s delay...")
+                    time.sleep(delay)
 
-            if len(content.encode('utf-8')) > self.max_size_bytes:
-                return None, "Content exceeds size limit"
+                # Set Referer header to the domain root for better anti-bot evasion
+                domain = urlparse(url)
+                referer = f"{domain.scheme}://{domain.netloc}/"
 
-            return content, None
+                # Update session headers with Referer
+                request_headers = self.session.headers.copy()
+                if attempt > 0:
+                    # On retry, add Referer to make it look more natural
+                    request_headers['Referer'] = referer
 
-        except requests.exceptions.Timeout:
-            return None, "Request timed out"
-        except requests.exceptions.RequestException as e:
-            return None, f"Request failed: {str(e)}"
-        except Exception as e:
-            return None, f"Unexpected error: {str(e)}"
+                response = self.session.get(
+                    url,
+                    headers=request_headers,
+                    timeout=self.timeout,
+                    stream=True,
+                    allow_redirects=True
+                )
+                response.raise_for_status()
+
+                # Check content size
+                content_length = response.headers.get('content-length')
+                if content_length and int(content_length) > self.max_size_bytes:
+                    return None, f"Content too large: {int(content_length) / (1024*1024):.2f}MB"
+
+                # Get content with proper encoding detection
+                # Try to detect encoding from headers or content
+                if response.encoding == 'ISO-8859-1':
+                    # requests defaults to ISO-8859-1 if no charset specified
+                    # Try to detect from content
+                    response.encoding = response.apparent_encoding
+
+                content = response.text
+
+                if len(content.encode('utf-8')) > self.max_size_bytes:
+                    return None, "Content exceeds size limit"
+
+                return content, None
+
+            except requests.exceptions.Timeout:
+                last_error = "Request timed out"
+            except requests.exceptions.HTTPError as e:
+                # Don't retry on client errors (4xx) except 429 (rate limit)
+                if e.response.status_code == 429:
+                    last_error = "Rate limited (429)"
+                elif 400 <= e.response.status_code < 500:
+                    return None, f"Request failed: {str(e)}"
+                else:
+                    last_error = f"Request failed: {str(e)}"
+            except requests.exceptions.RequestException as e:
+                last_error = f"Request failed: {str(e)}"
+            except Exception as e:
+                last_error = f"Unexpected error: {str(e)}"
+
+        # All retries failed
+        return None, f"{last_error} (after {max_retries} attempts)"
 
     def extract_content(self, html: str, track_containers: bool = False, chinese_mode: bool = False) -> Tuple[str, Optional[List[Dict]]]:
         """

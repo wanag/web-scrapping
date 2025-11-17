@@ -205,6 +205,113 @@ async def logout(_: dict = Depends(require_auth)):
 # ==================== Scraper Endpoints ====================
 
 @app.post(
+    "/api/scraper/preview-html",
+    response_model=PreviewResponse,
+    tags=["Scraper"],
+    dependencies=[Depends(require_auth)]
+)
+async def preview_from_html(raw_html: str, mode: ScrapeMode = ScrapeMode.ONE_PAGE, chinese_mode: bool = False):
+    """
+    Preview content from raw HTML (for manual import when URL scraping fails).
+
+    Args:
+        raw_html: Raw HTML content
+        mode: Scraping mode
+        chinese_mode: Use Chinese character detection
+
+    Returns:
+        Preview with content sample and extracted metadata
+    """
+    try:
+        if mode == ScrapeMode.ONE_PAGE:
+            # Extract content from HTML
+            content, containers = extractor.extract_content(raw_html, track_containers=True, chinese_mode=chinese_mode)
+
+            if not content:
+                return PreviewResponse(
+                    success=False,
+                    mode=mode,
+                    content_preview="",
+                    full_length=0,
+                    metadata=PreviewMetadata(),
+                    error="No content found in HTML"
+                )
+
+            # Extract metadata
+            metadata = extractor.extract_metadata(raw_html, "manual-import")
+
+            # Create preview
+            content_preview = content[:500]
+            if len(content) > 500:
+                content_preview += "..."
+
+            preview_metadata = PreviewMetadata(
+                title=metadata.get('title'),
+                author=metadata.get('author'),
+                language=metadata.get('language', 'en'),
+                description=metadata.get('description'),
+                tags=metadata.get('tags', [])
+            )
+
+            # Size info
+            content_bytes = len(content.encode('utf-8'))
+            compressed_content = gzip.compress(content.encode('utf-8'))
+            compressed_size = len(compressed_content)
+
+            size_info = ContentSizeInfo(
+                character_count=len(content),
+                estimated_bytes=content_bytes,
+                formatted_size=format_bytes(content_bytes),
+                compression_estimate=format_bytes(compressed_size)
+            )
+
+            # Containers
+            containers_list = None
+            if containers:
+                containers_list = [
+                    ContainerInfo(
+                        type=c['type'],
+                        id=c.get('id'),
+                        classes=c.get('classes'),
+                        content_length=c['content_length'],
+                        content_preview=c['content_preview'],
+                        selected=True
+                    )
+                    for c in containers
+                ]
+
+            return PreviewResponse(
+                success=True,
+                mode=mode,
+                content_preview=content_preview,
+                full_length=len(content),
+                full_content=content,
+                metadata=preview_metadata,
+                size_info=size_info,
+                containers=containers_list
+            )
+        else:
+            return PreviewResponse(
+                success=False,
+                mode=mode,
+                content_preview="",
+                full_length=0,
+                metadata=PreviewMetadata(),
+                error="HTML import only supports ONE_PAGE mode currently"
+            )
+
+    except Exception as e:
+        return PreviewResponse(
+            success=False,
+            mode=mode,
+            content_preview="",
+            full_length=0,
+            metadata=PreviewMetadata(),
+            error=f"Error processing HTML: {str(e)}"
+        )
+
+
+@app.post(
     "/api/scraper/preview",
     response_model=PreviewResponse,
     tags=["Scraper"],
