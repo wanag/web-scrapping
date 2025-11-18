@@ -25,6 +25,15 @@
           </v-col>
           <v-col cols="auto">
             <v-btn
+              color="secondary"
+              size="large"
+              prepend-icon="mdi-upload"
+              @click="goToImport"
+              class="mr-2"
+            >
+              Import Book
+            </v-btn>
+            <v-btn
               color="primary"
               size="large"
               prepend-icon="mdi-plus"
@@ -228,6 +237,10 @@ async function loadBooks() {
 
 function goToScraper() {
   router.push({ name: 'scraper' })
+}
+
+function goToImport() {
+  router.push({ name: 'import' })
 }
 
 function openBook(bookId) {

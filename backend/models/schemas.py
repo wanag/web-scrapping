@@ -262,3 +262,31 @@ class SuccessResponse(BaseModel):
     """Generic success response."""
     success: bool
     message: str
+
+
+# Import Models
+class ImportFileResponse(BaseModel):
+    """Response for file import preview/execution."""
+    success: bool
+    book_id: Optional[str] = None
+    message: str
+    suggested_metadata: Optional[Dict[str, Any]] = None
+
+
+class ValidateFolderResponse(BaseModel):
+    """Response for folder validation/preview."""
+    valid: bool
+    errors: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    metadata: Optional[Dict[str, Any]] = None
+    index: Optional[Dict[str, Any]] = None
+    chapters_count: int = 0
+    folder_path: Optional[str] = None
+
+
+class ImportFolderResponse(BaseModel):
+    """Response for folder import execution."""
+    success: bool
+    book_id: Optional[str] = None
+    message: str
+    chapters_imported: int = 0

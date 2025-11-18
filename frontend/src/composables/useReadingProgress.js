@@ -36,13 +36,20 @@ export function useReadingProgress() {
   /**
    * Get reading progress for a specific book
    * @param {string} bookId - The book UUID
-   * @returns {Object|null} Progress object with {chapterId, lastRead} or null
+   * @returns {Object|null} Progress object with {chapterId, lastRead, readChapters} or null
    */
   const getProgress = (bookId) => {
     if (!bookId) return null
 
     const allProgress = getAllProgress()
-    return allProgress[bookId] || null
+    const progress = allProgress[bookId]
+
+    // Ensure readChapters array exists (for backwards compatibility)
+    if (progress && !progress.readChapters) {
+      progress.readChapters = []
+    }
+
+    return progress || null
   }
 
   /**
@@ -57,9 +64,22 @@ export function useReadingProgress() {
     }
 
     const allProgress = getAllProgress()
+    const existingProgress = allProgress[bookId] || { readChapters: [] }
+
+    // Ensure readChapters array exists
+    if (!existingProgress.readChapters) {
+      existingProgress.readChapters = []
+    }
+
+    // Add current chapter to read chapters if not already there
+    if (!existingProgress.readChapters.includes(chapterId)) {
+      existingProgress.readChapters.push(chapterId)
+    }
+
     allProgress[bookId] = {
       chapterId: chapterId,
-      lastRead: new Date().toISOString()
+      lastRead: new Date().toISOString(),
+      readChapters: existingProgress.readChapters
     }
     saveAllProgress(allProgress)
   }
@@ -147,6 +167,27 @@ export function useReadingProgress() {
     }
   }
 
+  /**
+   * Get list of read chapters for a book
+   * @param {string} bookId - The book UUID
+   * @returns {Array<number>} Array of chapter IDs that have been read
+   */
+  const getReadChapters = (bookId) => {
+    const progress = getProgress(bookId)
+    return progress?.readChapters || []
+  }
+
+  /**
+   * Check if a specific chapter has been read
+   * @param {string} bookId - The book UUID
+   * @param {number} chapterId - The chapter index/ID
+   * @returns {boolean} True if chapter has been read
+   */
+  const isChapterRead = (bookId, chapterId) => {
+    const readChapters = getReadChapters(bookId)
+    return readChapters.includes(chapterId)
+  }
+
   return {
     getProgress,
     saveProgress,
@@ -155,6 +196,8 @@ export function useReadingProgress() {
     clearAllProgress,
     hasProgress,
     getLastReadTime,
-    getAllProgress
+    getAllProgress,
+    getReadChapters,
+    isChapterRead
   }
 }

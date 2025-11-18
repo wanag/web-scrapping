@@ -126,6 +126,58 @@ export default {
     }
   },
 
+  // Import
+  imports: {
+    async importFile(file, metadata) {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      if (metadata.title) formData.append('title', metadata.title)
+      if (metadata.author) formData.append('author', metadata.author)
+      if (metadata.language) formData.append('language', metadata.language)
+      if (metadata.description) formData.append('description', metadata.description)
+      if (metadata.tags && metadata.tags.length > 0) {
+        formData.append('tags', JSON.stringify(metadata.tags))
+      }
+
+      return api.post('/api/books/import-file', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+    },
+
+    async validateFolder(zipFile) {
+      const formData = new FormData()
+      formData.append('file', zipFile)
+
+      return api.post('/api/books/validate-folder', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+    },
+
+    async importFolder(zipFile, metadata) {
+      const formData = new FormData()
+      formData.append('file', zipFile)
+
+      if (metadata.title) formData.append('title', metadata.title)
+      if (metadata.author) formData.append('author', metadata.author)
+      if (metadata.language) formData.append('language', metadata.language)
+      if (metadata.description) formData.append('description', metadata.description)
+      if (metadata.tags && metadata.tags.length > 0) {
+        formData.append('tags', JSON.stringify(metadata.tags))
+      }
+
+      return api.post('/api/books/import-folder', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+    }
+  },
+
   // System
   system: {
     getStats() {

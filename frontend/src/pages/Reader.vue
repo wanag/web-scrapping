@@ -5,6 +5,9 @@
       <v-app-bar-title>{{ book?.metadata.title || 'Reader' }}</v-app-bar-title>
 
       <template v-slot:append>
+        <v-btn icon @click="chapterSelectorDialog = true">
+          <v-icon>mdi-format-list-numbered</v-icon>
+        </v-btn>
         <v-btn
           :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
           @click="toggleTheme"
@@ -151,6 +154,16 @@
       </v-card>
     </v-dialog>
 
+    <!-- Chapter Selector -->
+    <ChapterSelector
+      v-if="book"
+      v-model="chapterSelectorDialog"
+      :chapters="book.chapters"
+      :current-chapter-id="currentChapterId"
+      :read-chapters="readChapters"
+      @select-chapter="goToChapter"
+    />
+
     <!-- Resume notification -->
     <v-snackbar
       v-model="resumeSnackbar"
@@ -171,12 +184,13 @@ import { useBooksStore } from '@/stores/books'
 import { useTheme } from '@/composables/useTheme'
 import { useReadingProgress } from '@/composables/useReadingProgress'
 import api from '@/services/api'
+import ChapterSelector from '@/components/ChapterSelector.vue'
 
 const router = useRouter()
 const route = useRoute()
 const booksStore = useBooksStore()
 const { isDark, toggleTheme } = useTheme()
-const { getProgress, saveProgress } = useReadingProgress()
+const { getProgress, saveProgress, getReadChapters } = useReadingProgress()
 
 const bookId = computed(() => route.params.bookId)
 const book = ref(null)
@@ -191,6 +205,10 @@ const fontSize = ref(16)
 const lineHeight = ref(1.6)
 const maxWidth = ref(800)
 const theme = ref('light')
+
+// Chapter selector
+const chapterSelectorDialog = ref(false)
+const readChapters = computed(() => getReadChapters(bookId.value))
 
 // Progress notification
 const resumeSnackbar = ref(false)

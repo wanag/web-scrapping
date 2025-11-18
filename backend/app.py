@@ -4,10 +4,15 @@ Phase 1: Core Functionality - PIN auth, one-page scraping, reader, storage.
 """
 import os
 import gzip
+import uuid
+import tempfile
+import shutil
+import json
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -15,6 +20,7 @@ from backend.auth import init_auth, get_auth_manager, require_auth
 from backend.storage.manager import StorageManager
 from backend.scraper.extractor import ContentExtractor
 from backend.scraper.modes import ScrapeMode
+from backend.importer import FileParser, FolderValidator
 from backend.models.schemas import (
     AuthRequest,
     AuthResponse,
@@ -36,7 +42,10 @@ from backend.models.schemas import (
     BookDetailResponse,
     ChapterContent,
     ErrorResponse,
-    SuccessResponse
+    SuccessResponse,
+    ImportFileResponse,
+    ValidateFolderResponse,
+    ImportFolderResponse
 )
 
 # Load environment variables
@@ -971,6 +980,269 @@ async def delete_book(book_id: str):
         success=True,
         message=f"Book '{book_id}' deleted successfully"
     )
+
+
+# ==================== Import Endpoints ====================
+
+@app.post(
+    "/api/books/import-file",
+    response_model=ImportFileResponse,
+    tags=["Import"],
+    dependencies=[Depends(require_auth)]
+)
+async def import_file(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    language: Optional[str] = Form("en"),
+    tags: Optional[str] = Form(None),  # JSON string of tags array
+    description: Optional[str] = Form(None)
+):
+    """
+    Import a single text or markdown file as a book.
+
+    Args:
+        file: Uploaded .txt or .md file
+        title: Book title (optional, auto-detected from content if not provided)
+        author: Author name (optional)
+        language: Language code (default: 'en')
+        tags: JSON string of tags array (optional)
+        description: Book description (optional)
+
+    Returns:
+        Import result with book ID
+    """
+    # Validate file type
+    filename = file.filename
+    file_ext = Path(filename).suffix.lower()
+
+    if not FileParser.validate_file(filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type: {file_ext}. Supported: .txt, .md"
+        )
+
+    # Read file content
+    file_content = await file.read()
+
+    # Parse file
+    try:
+        parsed = FileParser.parse_file(file_content, filename, file_ext)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+    # Use provided metadata or fall back to detected
+    final_title = title if title else parsed['suggested_title']
+    final_language = language if language else parsed['detected_language']
+
+    # Parse tags if provided
+    final_tags = []
+    if tags:
+        try:
+            final_tags = json.loads(tags)
+        except json.JSONDecodeError:
+            final_tags = []
+
+    # Create book metadata
+    book_metadata = {
+        'title': final_title,
+        'author': author,
+        'language': final_language,
+        'source_url': 'manual',
+        'description': description,
+        'tags': final_tags
+    }
+
+    # Create chapter data
+    chapter_data = {
+        'title': final_title,
+        'content': parsed['content']
+    }
+
+    # Save book
+    try:
+        book_id = storage.save_book(
+            content=parsed['content'],
+            metadata=book_metadata,
+            chapter_name=final_title
+        )
+
+        return ImportFileResponse(
+            success=True,
+            book_id=book_id,
+            message=f"File '{filename}' imported successfully as book '{final_title}'",
+            suggested_metadata={
+                'title': parsed['suggested_title'],
+                'language': parsed['detected_language'],
+                'encoding': parsed['detected_encoding']
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save book: {str(e)}"
+        )
+
+
+@app.post(
+    "/api/books/validate-folder",
+    response_model=ValidateFolderResponse,
+    tags=["Import"],
+    dependencies=[Depends(require_auth)]
+)
+async def validate_folder(file: UploadFile = File(...)):
+    """
+    Validate and preview a folder (ZIP) before importing.
+
+    Args:
+        file: Uploaded ZIP file containing book folder
+
+    Returns:
+        Validation report with detected metadata, errors, warnings
+    """
+    # Validate file is ZIP
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a ZIP archive"
+        )
+
+    # Read ZIP content
+    zip_content = await file.read()
+
+    # Create temporary directory for extraction
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        # Validate and preview
+        try:
+            result = FolderValidator.validate_and_preview(zip_content, temp_path)
+
+            return ValidateFolderResponse(
+                valid=result['valid'],
+                errors=result['errors'],
+                warnings=result['warnings'],
+                metadata=result['metadata'],
+                index=result['index'],
+                chapters_count=result['chapters_count'],
+                folder_path=result['folder_path']
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Validation failed: {str(e)}"
+            )
+
+
+@app.post(
+    "/api/books/import-folder",
+    response_model=ImportFolderResponse,
+    tags=["Import"],
+    dependencies=[Depends(require_auth)]
+)
+async def import_folder(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    language: Optional[str] = Form("en"),
+    tags: Optional[str] = Form(None),  # JSON string of tags array
+    description: Optional[str] = Form(None)
+):
+    """
+    Import a folder (ZIP) containing a book with chapters.
+
+    Args:
+        file: Uploaded ZIP file
+        title: Book title (overrides detected)
+        author: Author name (overrides detected)
+        language: Language code (overrides detected)
+        tags: JSON string of tags array
+        description: Book description
+
+    Returns:
+        Import result with book ID and chapter count
+    """
+    # Validate file is ZIP
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a ZIP archive"
+        )
+
+    # Read ZIP content
+    zip_content = await file.read()
+
+    # Create temporary directory for extraction
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        # Validate first
+        try:
+            validation = FolderValidator.validate_and_preview(zip_content, temp_path)
+
+            if not validation['valid']:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid folder structure: {', '.join(validation['errors'])}"
+                )
+
+            # Get folder path and read chapters
+            folder_path = Path(validation['folder_path'])
+            chapters = []
+
+            for chapter_file in validation['chapter_files']:
+                content = FolderValidator.read_chapter_content(folder_path, chapter_file)
+                # Get chapter title from index
+                chapter_info = next(
+                    (ch for ch in validation['index']['chapters'] if ch['file'] == chapter_file),
+                    None
+                )
+                chapter_title = chapter_info['title'] if chapter_info else f"Chapter {len(chapters)}"
+
+                chapters.append({
+                    'title': chapter_title,
+                    'content': content
+                })
+
+            # Override metadata with user input if provided
+            final_metadata = validation['metadata'].copy()
+            if title:
+                final_metadata['title'] = title
+            if author:
+                final_metadata['author'] = author
+            if language:
+                final_metadata['language'] = language
+            if description:
+                final_metadata['description'] = description
+            if tags:
+                try:
+                    final_metadata['tags'] = json.loads(tags)
+                except json.JSONDecodeError:
+                    pass
+
+            # Save multi-chapter book
+            book_id = storage.save_multi_chapter_book(
+                chapters=chapters,
+                metadata=final_metadata
+            )
+
+            return ImportFolderResponse(
+                success=True,
+                book_id=book_id,
+                message=f"Folder imported successfully with {len(chapters)} chapters",
+                chapters_imported=len(chapters)
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Import failed: {str(e)}"
+            )
 
 
 # ==================== System Endpoints ====================

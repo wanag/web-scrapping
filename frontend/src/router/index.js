@@ -24,6 +24,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/import',
+      name: 'import',
+      component: () => import('@/pages/Import.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/scrape-chapter/:data?',
       name: 'scrape-chapter',
       component: () => import('@/pages/ScrapChapter.vue'),
